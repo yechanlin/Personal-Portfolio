@@ -57,7 +57,7 @@ export default function Hero() {
       </p>
 
       <p className="mt-2 max-w-2xl text-sm text-ink-dim">
-        {profile.title} · {profile.school} · Class of {profile.gradYear}
+        {profile.title} · {profile.school} · Graduating {profile.gradDate}
       </p>
 
       <motion.div

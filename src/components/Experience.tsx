@@ -30,6 +30,11 @@ export default function Experience() {
                 </li>
               ))}
             </ul>
+            {e.link && (
+              <a href={e.link} target="_blank" rel="noopener noreferrer" className="px-link mt-4 inline-block">
+                View PR ↗
+              </a>
+            )}
             <ul className="mt-5 flex flex-wrap gap-2">
               {e.tags.map((t) => (
                 <li key={t} className="bg-sky-deep px-2 py-1 text-xs text-ink-dim">{t}</li>
