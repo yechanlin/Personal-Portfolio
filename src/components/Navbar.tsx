@@ -1,60 +1,88 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { profile } from "@/data/profile";
 
-const navLinks = [
+const links = [
   { label: "About", href: "#about" },
-  { label: "Experience", href: "#experience" },
-  { label: "Projects", href: "#projects" },
+  { label: "Quests", href: "#quests" },
+  { label: "Loot", href: "#loot" },
   { label: "Skills", href: "#skills" },
-  { label: "Contact", href: "#contact" },
+  { label: "Save", href: "#save" },
 ];
 
 export default function Navbar() {
+  const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   return (
-    <motion.header
-      initial={{ y: -80, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
-      className="fixed top-0 left-0 right-0 z-50 flex justify-center px-6 pt-4"
+    <header
+      className={`fixed inset-x-0 top-0 z-50 transition-colors ${
+        scrolled || open ? "bg-sky-deep/95 shadow-[0_4px_0_0_var(--edge)]" : ""
+      }`}
     >
-      <nav
-        className={`glass rounded-2xl px-6 py-3 flex items-center gap-8 transition-all duration-300 ${
-          scrolled ? "shadow-lg shadow-blue-100/60" : ""
-        }`}
-      >
-        <a href="#" className="text-blue-600 font-bold text-lg tracking-tight select-none">
-          YL
+      <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+        <a href="#top" className="px-link text-xl text-ink" onClick={() => setOpen(false)}>
+          <span className="text-coral">▲</span> {profile.handle}
         </a>
 
-        <div className="hidden sm:flex items-center gap-1">
-          {navLinks.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="px-3 py-1.5 text-sm font-medium text-slate-600 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-colors duration-200"
-            >
-              {link.label}
-            </a>
+        <ul className="hidden items-center gap-1 sm:flex">
+          {links.map((l) => (
+            <li key={l.href}>
+              <a
+                href={l.href}
+                className="px-link block px-3 py-1 text-base text-ink-dim hover:bg-panel hover:text-gold"
+              >
+                [{l.label}]
+              </a>
+            </li>
           ))}
-        </div>
+          <li className="ml-3">
+            <a href={profile.resume} className="px-btn px-btn--mint !px-3 !py-2 text-sm">
+              Resume
+            </a>
+          </li>
+        </ul>
 
-        <a
-          href="mailto:yechanlin15703@gmail.com"
-          className="hidden sm:block text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded-xl transition-colors duration-200"
+        <button
+          type="button"
+          className="px-btn px-btn--ghost !px-3 !py-2 sm:hidden"
+          aria-expanded={open}
+          aria-controls="mobile-menu"
+          aria-label={open ? "Close menu" : "Open menu"}
+          onClick={() => setOpen((o) => !o)}
         >
-          Hire Me
-        </a>
+          {open ? "✕" : "☰"}
+        </button>
       </nav>
-    </motion.header>
+
+      {open && (
+        <ul id="mobile-menu" className="flex flex-col gap-1 px-4 pb-5 sm:hidden">
+          {links.map((l) => (
+            <li key={l.href}>
+              <a
+                href={l.href}
+                onClick={() => setOpen(false)}
+                className="px-link block px-2 py-2 text-xl text-ink hover:bg-panel"
+              >
+                ▸ {l.label}
+              </a>
+            </li>
+          ))}
+          <li>
+            <a href={profile.resume} className="px-link block px-2 py-2 text-xl">
+              ▸ Resume
+            </a>
+          </li>
+        </ul>
+      )}
+    </header>
   );
 }

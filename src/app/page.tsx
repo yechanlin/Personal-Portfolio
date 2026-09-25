@@ -1,5 +1,7 @@
-import AnimatedBackground from "@/components/AnimatedBackground";
+import MotionProvider from "@/components/MotionProvider";
 
+import AnimatedBackground from "@/components/AnimatedBackground";
+import BootScreen from "@/components/BootScreen";
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import About from "@/components/About";
@@ -11,16 +13,20 @@ import Footer from "@/components/Footer";
 
 export default function Home() {
   return (
-    <main className="relative min-h-screen">
+    <MotionProvider>
+      <BootScreen />
       <AnimatedBackground />
+      <div className="scanlines" aria-hidden="true" />
       <Navbar />
-      <Hero />
-      <About />
-      <Experience />
-      <Projects />
-      <Skills />
-      <Contact />
+      <main className="relative">
+        <Hero />
+        <About />
+        <Experience />
+        <Projects />
+        <Skills />
+        <Contact />
+      </main>
       <Footer />
-    </main>
+    </MotionProvider>
   );
 }

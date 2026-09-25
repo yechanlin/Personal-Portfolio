@@ -2,235 +2,186 @@
 
 import { useEffect, useRef } from "react";
 
-interface Particle {
+// The scene is drawn on a low-resolution canvas and stretched with
+// `image-rendering: pixelated`, so every shape snaps to a chunky pixel grid.
+const PX = 6;
+
+interface Puff {
   x: number;
   y: number;
   baseX: number;
   baseY: number;
-  radius: number;
-  alpha: number;
+  r: number;
   scattered: boolean;
   vx: number;
   vy: number;
   life: number;
   maxLife: number;
-  fadingIn: boolean;
-  fadeProgress: number;
+  fade: number; // 0..1 fade-in after reforming
 }
 
 interface Cloud {
   x: number;
   y: number;
   speed: number;
-  particles: Particle[];
   width: number;
-  height: number;
+  shade: string;
+  puffs: Puff[];
 }
 
-// Pre-render a soft circle sprite (radial gradient) — replaces expensive ctx.filter blur
-const spriteCache = new Map<number, HTMLCanvasElement>();
-function getSoftCircle(radius: number): HTMLCanvasElement {
-  const key = Math.round(radius);
-  if (spriteCache.has(key)) return spriteCache.get(key)!;
-  const size = key * 3; // extra room for soft edge
-  const c = document.createElement("canvas");
-  c.width = size * 2;
-  c.height = size * 2;
-  const cx = c.getContext("2d")!;
-  const grad = cx.createRadialGradient(size, size, 0, size, size, size);
-  grad.addColorStop(0, "rgba(255,255,255,1)");
-  grad.addColorStop(0.4, "rgba(255,255,255,0.8)");
-  grad.addColorStop(0.7, "rgba(255,255,255,0.3)");
-  grad.addColorStop(1, "rgba(255,255,255,0)");
-  cx.fillStyle = grad;
-  cx.fillRect(0, 0, size * 2, size * 2);
-  spriteCache.set(key, c);
-  return c;
+interface Star {
+  x: number;
+  y: number;
+  phase: number;
+  speed: number;
 }
 
-function createCloudParticles(w: number, h: number, count: number, alphaMin: number, alphaRange: number, rMin: number, rRange: number): Particle[] {
-  const particles: Particle[] = [];
+const SHADES = ["#3a3470", "#4a4288", "#5b529c"];
+
+function createCloud(w: number, h: number, anywhere: boolean): Cloud {
+  const width = 14 + Math.random() * 26;
+  const count = Math.round(width / 3);
+  const puffs: Puff[] = [];
   for (let i = 0; i < count; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const rx = (Math.random() * 0.45 + 0.1) * w;
-    const ry = (Math.random() * 0.4 + 0.1) * h;
-    const px = Math.cos(angle) * rx;
-    const py = Math.sin(angle) * ry * 0.5;
-    particles.push({
+    const px = (i / count - 0.5) * width;
+    const py = (Math.random() - 0.3) * 4 - (1 - Math.abs(i / count - 0.5) * 2) * 3;
+    puffs.push({
       x: px, y: py, baseX: px, baseY: py,
-      radius: Math.random() * rRange + rMin,
-      alpha: Math.random() * alphaRange + alphaMin,
-      scattered: false, vx: 0, vy: 0,
-      life: 0, maxLife: 0, fadingIn: false, fadeProgress: 1,
+      r: 2 + Math.random() * 3,
+      scattered: false, vx: 0, vy: 0, life: 0, maxLife: 0, fade: 1,
     });
   }
-  return particles;
-}
-
-function createCloud(canvasW: number, canvasH: number): Cloud {
-  const rand = Math.random();
-  let w: number, h: number, count: number, aMin: number, aRange: number, rMin: number, rRange: number, speed: number;
-
-  if (rand < 0.3) { // large
-    w = Math.random() * 100 + 200; h = Math.random() * 40 + 70;
-    count = 65; aMin = 0.5; aRange = 0.35; rMin = 16; rRange = 24;
-    speed = Math.random() * 0.12 + 0.06;
-  } else if (rand < 0.65) { // medium
-    w = Math.random() * 80 + 120; h = Math.random() * 25 + 45;
-    count = 45; aMin = 0.4; aRange = 0.3; rMin = 12; rRange = 18;
-    speed = Math.random() * 0.18 + 0.1;
-  } else { // small
-    w = Math.random() * 50 + 60; h = Math.random() * 15 + 25;
-    count = 25; aMin = 0.3; aRange = 0.25; rMin = 8; rRange = 12;
-    speed = Math.random() * 0.25 + 0.12;
-  }
-
   return {
-    x: Math.random() * (canvasW + w * 2) - w,
-    y: Math.random() * canvasH * 0.92 + canvasH * 0.03,
-    speed,
-    particles: createCloudParticles(w, h, count, aMin, aRange, rMin, rRange),
-    width: w, height: h,
+    x: anywhere ? Math.random() * (w + width * 2) - width : -width,
+    y: 8 + Math.random() * (h - 16),
+    speed: 0.02 + Math.random() * 0.05,
+    width,
+    shade: SHADES[Math.floor(Math.random() * SHADES.length)],
+    puffs,
   };
 }
 
 export default function AnimatedBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const cloudsRef = useRef<Cloud[]>([]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let clouds: Cloud[] = [];
+    let stars: Star[] = [];
 
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      cloudsRef.current = Array.from({ length: 18 }, () =>
-        createCloud(canvas.width, canvas.height)
-      );
+      canvas.width = Math.ceil(window.innerWidth / PX);
+      canvas.height = Math.ceil(window.innerHeight / PX);
+      const n = Math.max(6, Math.round(canvas.width / 22));
+      clouds = Array.from({ length: n }, () => createCloud(canvas.width, canvas.height, true));
+      stars = Array.from({ length: Math.round((canvas.width * canvas.height) / 180) }, () => ({
+        x: Math.floor(Math.random() * canvas.width),
+        y: Math.floor(Math.random() * canvas.height),
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.01 + Math.random() * 0.03,
+      }));
     };
     resize();
-    window.addEventListener("resize", resize);
 
     const handleClick = (e: MouseEvent) => {
-      const mx = e.clientX;
-      const my = e.clientY;
-      const blastRadius = 80;
-
-      for (const cloud of cloudsRef.current) {
-        for (const p of cloud.particles) {
+      const mx = e.clientX / PX;
+      const my = e.clientY / PX;
+      const blast = 12;
+      for (const c of clouds) {
+        for (const p of c.puffs) {
           if (p.scattered) continue;
-          const dx = cloud.x + p.x - mx;
-          const dy = cloud.y + p.y - my;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < blastRadius + p.radius) {
+          const dx = c.x + p.x - mx;
+          const dy = c.y + p.y - my;
+          const dist = Math.hypot(dx, dy);
+          if (dist < blast + p.r) {
+            const force = ((blast - dist) / blast) * 1.2 + 0.4;
+            const a = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.8;
             p.scattered = true;
-            const force = ((blastRadius - dist) / blastRadius) * 7 + 2;
-            const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.8;
-            p.vx = Math.cos(angle) * force;
-            p.vy = Math.sin(angle) * force - Math.random() * 1.5;
+            p.vx = Math.cos(a) * force;
+            p.vy = Math.sin(a) * force - Math.random() * 0.3;
             p.life = 0;
-            p.maxLife = Math.random() * 90 + 60;
+            p.maxLife = 50 + Math.random() * 50;
           }
         }
       }
     };
-    window.addEventListener("click", handleClick);
 
-    // Pre-render background gradient
-    const bgCanvas = document.createElement("canvas");
-    const drawBg = () => {
-      bgCanvas.width = canvas.width;
-      bgCanvas.height = canvas.height;
-      const bgCtx = bgCanvas.getContext("2d")!;
-      const grad = bgCtx.createLinearGradient(0, 0, 0, canvas.height);
-      grad.addColorStop(0, "#eef2ff");
-      grad.addColorStop(0.5, "#f8fafc");
-      grad.addColorStop(1, "#ffffff");
-      bgCtx.fillStyle = grad;
-      bgCtx.fillRect(0, 0, canvas.width, canvas.height);
-      // Ambient blobs baked in
-      bgCtx.filter = "blur(80px)";
-      bgCtx.globalAlpha = 0.08;
-      bgCtx.beginPath();
-      bgCtx.arc(canvas.width * 0.15, canvas.height * 0.2, 300, 0, Math.PI * 2);
-      bgCtx.fillStyle = "#3b82f6";
-      bgCtx.fill();
-      bgCtx.beginPath();
-      bgCtx.arc(canvas.width * 0.85, canvas.height * 0.5, 250, 0, Math.PI * 2);
-      bgCtx.fillStyle = "#38bdf8";
-      bgCtx.fill();
-      bgCtx.filter = "none";
-    };
-    drawBg();
-    window.addEventListener("resize", drawBg);
-
-    let raf: number;
     const draw = () => {
-      // Stamp pre-rendered background (no blur per frame)
-      ctx.drawImage(bgCanvas, 0, 0);
+      const { width: w, height: h } = canvas;
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, "#121028");
+      grad.addColorStop(1, "#1b1838");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
 
-      for (const cloud of cloudsRef.current) {
-        cloud.x += cloud.speed;
-        if (cloud.x > canvas.width + cloud.width * 2) {
-          cloud.x = -cloud.width * 2.5;
-        }
+      for (const s of stars) {
+        s.phase += s.speed;
+        const on = Math.sin(s.phase) > 0.2;
+        ctx.fillStyle = on ? "#f4ecd8" : "#6d6594";
+        ctx.fillRect(s.x, s.y, 1, 1);
+      }
 
-        for (const p of cloud.particles) {
-          let drawX: number, drawY: number, drawAlpha: number, drawRadius: number;
+      for (const c of clouds) {
+        c.x += c.speed;
+        if (c.x - c.width > w) Object.assign(c, createCloud(w, h, false));
 
+        ctx.fillStyle = c.shade;
+        for (const p of c.puffs) {
+          let alpha = p.fade;
           if (p.scattered) {
             p.x += p.vx;
             p.y += p.vy;
-            p.vy += 0.03;
-            p.vx *= 0.99;
-            p.vy *= 0.99;
+            p.vy += 0.01;
             p.life++;
-            const lifeRatio = p.life / p.maxLife;
-            drawX = cloud.x + p.x;
-            drawY = cloud.y + p.y;
-            drawAlpha = p.alpha * (1 - lifeRatio);
-            drawRadius = p.radius * (1 - lifeRatio * 0.5);
-
+            alpha = 1 - p.life / p.maxLife;
             if (p.life >= p.maxLife) {
-              p.scattered = false;
-              p.x = p.baseX; p.y = p.baseY;
-              p.vx = 0; p.vy = 0;
-              p.fadingIn = true; p.fadeProgress = 0;
+              Object.assign(p, { scattered: false, x: p.baseX, y: p.baseY, vx: 0, vy: 0, fade: 0 });
               continue;
             }
-          } else {
-            if (p.fadingIn) {
-              p.fadeProgress += 0.012;
-              if (p.fadeProgress >= 1) { p.fadeProgress = 1; p.fadingIn = false; }
-            }
-            drawX = cloud.x + p.x;
-            drawY = cloud.y + p.y;
-            drawAlpha = p.alpha * p.fadeProgress;
-            drawRadius = p.radius;
+          } else if (p.fade < 1) {
+            p.fade = Math.min(1, p.fade + 0.02);
           }
-
-          if (drawAlpha < 0.01) continue;
-
-          // Draw using pre-rendered sprite — no blur per frame
-          const sprite = getSoftCircle(drawRadius);
-          const s = Math.round(drawRadius) * 3;
-          ctx.globalAlpha = drawAlpha;
-          ctx.drawImage(sprite, drawX - s, drawY - s, s * 2, s * 2);
+          ctx.globalAlpha = alpha;
+          ctx.beginPath();
+          ctx.arc(Math.round(c.x + p.x), Math.round(c.y + p.y), p.r, 0, Math.PI * 2);
+          ctx.fill();
         }
+        ctx.globalAlpha = 1;
       }
-      ctx.globalAlpha = 1;
-
-      raf = requestAnimationFrame(draw);
     };
-    raf = requestAnimationFrame(draw);
+
+    let raf = 0;
+    const loop = () => {
+      draw();
+      raf = requestAnimationFrame(loop);
+    };
+    const start = () => {
+      if (!raf && !reduced) raf = requestAnimationFrame(loop);
+    };
+    const stop = () => {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    };
+    const handleVisibility = () => (document.hidden ? stop() : start());
+    const handleResize = () => {
+      resize();
+      draw();
+    };
+
+    draw();
+    start();
+    window.addEventListener("resize", handleResize);
+    document.addEventListener("visibilitychange", handleVisibility);
+    if (!reduced) window.addEventListener("click", handleClick);
 
     return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-      window.removeEventListener("resize", drawBg);
+      stop();
+      window.removeEventListener("resize", handleResize);
+      document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("click", handleClick);
     };
   }, []);
@@ -238,7 +189,7 @@ export default function AnimatedBackground() {
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0 -z-10"
+      className="pixelated fixed inset-0 -z-10 h-full w-full"
       aria-hidden="true"
     />
   );

@@ -1,9 +1,10 @@
+import { profile } from "@/data/profile";
+
 export default function Footer() {
   return (
-    <footer className="py-8 text-center text-sm text-slate-400">
+    <footer className="px-4 py-10 text-center text-xs text-ink-dim">
       <p>
-        Designed &amp; built by{" "}
-        <span className="font-semibold text-slate-500">Ye Chan Lin</span> · {new Date().getFullYear()}
+        © {new Date().getFullYear()} {profile.name} · built with Next.js · no pixels were harmed
       </p>
     </footer>
   );
